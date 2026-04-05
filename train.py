@@ -167,21 +167,29 @@ def main() -> None:
     # ── Dataset & splits ──
     full_dataset = StraightenDataset(
         args.images_dir, args.csv_path, train=True, image_size=args.image_size,
-        use_synthetic_rotation=args.use_synthetic_rotation
+        use_synthetic_rotation=args.use_synthetic_rotation,
+        device=device
     )
     val_size  = int(len(full_dataset) * args.val_split)
     train_size = len(full_dataset) - val_size
-    train_ds, val_ds = random_split(
-        full_dataset, [train_size, val_size],
-        generator=torch.Generator().manual_seed(args.seed)
-    )
-    # Val split should not use training augmentations
-    val_ds.dataset.train = False
+
+    generator = torch.Generator().manual_seed(args.seed)
+    indices = torch.randperm(len(full_dataset), generator=generator).tolist()
+    
+    import copy
+    from torch.utils.data import Subset
+    
+    train_dataset = copy.copy(full_dataset)
+    val_dataset = copy.copy(full_dataset)
+    val_dataset.train = False
+
+    train_ds = Subset(train_dataset, indices[:train_size])
+    val_ds = Subset(val_dataset, indices[train_size:])
 
     train_loader = DataLoader(train_ds, batch_size=args.batch_size,
-                              shuffle=True, num_workers=16, pin_memory=device.type == "cuda")
+                              shuffle=True, num_workers=0, pin_memory=False)
     val_loader   = DataLoader(val_ds,   batch_size=args.batch_size,
-                              shuffle=False, num_workers=16, pin_memory=device.type == "cuda")
+                              shuffle=False, num_workers=0, pin_memory=False)
 
     print(f"Train: {len(train_ds)} | Val: {len(val_ds)}")
 
