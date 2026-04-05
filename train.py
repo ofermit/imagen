@@ -35,6 +35,7 @@ from circular import circular_mae, circular_mse_loss, sincos_to_deg
 def get_device() -> torch.device:
     if torch.cuda.is_available():
         device = torch.device("cuda")
+        torch.backends.cudnn.benchmark = True
         print(f"Using GPU: {torch.cuda.get_device_name(0)}")
     else:
         device = torch.device("cpu")
@@ -59,17 +60,30 @@ def train_epoch(
     loader: DataLoader,
     optimizer: torch.optim.Optimizer,
     device: torch.device,
+    scaler: torch.amp.GradScaler | None = None,
 ) -> float:
     model.train()
     total_loss = 0.0
     for images, targets in loader:
         images, targets = images.to(device), targets.to(device)
         optimizer.zero_grad()
-        preds = model(images)
-        loss = circular_mse_loss(preds, targets)
-        loss.backward()
-        nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-        optimizer.step()
+        
+        if scaler is not None:
+            with torch.amp.autocast('cuda'):
+                preds = model(images)
+                loss = circular_mse_loss(preds, targets)
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
+            nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            preds = model(images)
+            loss = circular_mse_loss(preds, targets)
+            loss.backward()
+            nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            optimizer.step()
+            
         total_loss += loss.item() * len(images)
     return total_loss / len(loader.dataset)
 
@@ -111,8 +125,9 @@ def run_phase(
     checkpoint_path: Path,
 ) -> float:
     best_mae = math.inf
+    scaler = torch.amp.GradScaler('cuda') if device.type == 'cuda' else None
     for epoch in range(1, epochs + 1):
-        train_loss = train_epoch(model, train_loader, optimizer, device)
+        train_loss = train_epoch(model, train_loader, optimizer, device, scaler=scaler)
         val_mae = val_epoch(model, val_loader, device)
         scheduler.step()
         print(f"[{phase_name}] Epoch {epoch:03d}/{epochs} | "
@@ -164,9 +179,9 @@ def main() -> None:
     val_ds.dataset.train = False
 
     train_loader = DataLoader(train_ds, batch_size=args.batch_size,
-                              shuffle=True, num_workers=4, pin_memory=True)
+                              shuffle=True, num_workers=4, pin_memory=device.type == "cuda")
     val_loader   = DataLoader(val_ds,   batch_size=args.batch_size,
-                              shuffle=False, num_workers=4, pin_memory=True)
+                              shuffle=False, num_workers=4, pin_memory=device.type == "cuda")
 
     print(f"Train: {len(train_ds)} | Val: {len(val_ds)}")
 
