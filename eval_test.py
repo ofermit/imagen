@@ -27,7 +27,7 @@ _CHECKPOINT_PRIORITY = [
     ("efficientnet", Path("checkpoints/efficientnet_phase1_best.pth")),
     ("baseline",     Path("checkpoints/baseline_best.pth")),
 ]
-_IMAGE_SIZE = 224
+_IMAGE_SIZE = 480
 
 
 def _load_model(device: torch.device):

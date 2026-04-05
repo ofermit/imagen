@@ -91,6 +91,9 @@ def val_epoch(
         all_true.append(true_deg)
     pred_cat = torch.cat(all_pred)
     true_cat = torch.cat(all_true)
+    # In val_epoch, also compute what "always predict 0" would score
+    zero_mae = circular_mae(torch.zeros_like(pred_cat), true_cat)
+    print(f"  Zero-prediction MAE: {zero_mae:.3f}°")
     return circular_mae(pred_cat, true_cat).item()
 
 
@@ -128,7 +131,7 @@ def main() -> None:
     parser.add_argument("--csv_path",   type=str, required=True)
     parser.add_argument("--model",      type=str, default="efficientnet",
                         choices=["baseline", "efficientnet"])
-    parser.add_argument("--image_size", type=int, default=224)
+    parser.add_argument("--image_size", type=int, default=480)
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--val_split",  type=float, default=0.1)
     parser.add_argument("--seed",       type=int, default=42)
@@ -139,6 +142,8 @@ def main() -> None:
     parser.add_argument("--epochs_phase2", type=int, default=25)
     parser.add_argument("--lr_phase2",     type=float, default=1e-4)
     parser.add_argument("--checkpoint_dir", type=str, default="checkpoints")
+    parser.add_argument("--resume",        type=str, default=None, help="Path to checkpoint to resume from")
+    parser.add_argument("--use_synthetic_rotation", action="store_true", help="Add synthetic rotation augmentation")
     args = parser.parse_args()
 
     torch.manual_seed(args.seed)
@@ -146,7 +151,8 @@ def main() -> None:
 
     # ── Dataset & splits ──
     full_dataset = StraightenDataset(
-        args.images_dir, args.csv_path, train=True, image_size=args.image_size
+        args.images_dir, args.csv_path, train=True, image_size=args.image_size,
+        use_synthetic_rotation=args.use_synthetic_rotation
     )
     val_size  = int(len(full_dataset) * args.val_split)
     train_size = len(full_dataset) - val_size
@@ -170,6 +176,12 @@ def main() -> None:
     if args.model == "baseline":
         model = BaselineCNN(image_size=args.image_size).to(device)
         print(f"Baseline CNN | params: {sum(p.numel() for p in model.parameters()):,}")
+
+        if args.resume:
+            ckpt = torch.load(args.resume, map_location=device)
+            model.load_state_dict(ckpt["model_state_dict"])
+            print(f"Loaded checkpoint from {args.resume}")
+
         optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr_phase1, weight_decay=1e-4)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer, T_max=args.epochs_phase1
@@ -180,6 +192,11 @@ def main() -> None:
     else:  # efficientnet — two phases
         model = EfficientNetModel(pretrained=True).to(device)
         print(f"EfficientNet-B0 | params: {sum(p.numel() for p in model.parameters()):,}")
+
+        if args.resume:
+            ckpt = torch.load(args.resume, map_location=device)
+            model.load_state_dict(ckpt["model_state_dict"])
+            print(f"Loaded checkpoint from {args.resume}")
 
         # ── Phase 1: head only ──
         print("\n── Phase 1: head-only training ──")

@@ -16,7 +16,7 @@ class BaselineCNN(nn.Module):
         image_size: Input spatial resolution (default 224).
     """
 
-    def __init__(self, image_size: int = 224) -> None:
+    def __init__(self, image_size: int = 480) -> None:
         super().__init__()
         self.features = nn.Sequential(
             # Block 1: 3 → 32, stride 2 → 112x112
@@ -38,13 +38,17 @@ class BaselineCNN(nn.Module):
             # Block 5: 256 → 256, stride 2 → 7x7
             nn.Conv2d(256, 256, 3, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(256), nn.ReLU(inplace=True),
+
+            # Block 6: 256 → 512, stride 2 → 8x8 (for 480x480 input)
+            nn.Conv2d(256, 512, 3, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(512), nn.ReLU(inplace=True),
         )
 
         self.pool = nn.AdaptiveAvgPool2d(1)
 
         self.head = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(256, 128),
+            nn.Linear(512, 128),
             nn.ReLU(inplace=True),
             nn.Dropout(0.3),
             nn.Linear(128, 2),   # outputs: (sin θ, cos θ)
@@ -58,7 +62,7 @@ class BaselineCNN(nn.Module):
 
 if __name__ == "__main__":
     model = BaselineCNN()
-    dummy = torch.randn(4, 3, 224, 224)
+    dummy = torch.randn(4, 3, 480, 480)
     out = model(dummy)
     print(f"Output shape: {out.shape}")   # (4, 2)
     total = sum(p.numel() for p in model.parameters())

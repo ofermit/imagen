@@ -57,10 +57,12 @@ class StraightenDataset(Dataset):
         train: bool = True,
         image_size: int = 224,
         use_hflip: bool = True,
+        use_synthetic_rotation: bool = False,
     ) -> None:
         self.images_dir = Path(images_dir)
         self.train = train
         self.use_hflip = use_hflip and train
+        self.use_synthetic_rotation = use_synthetic_rotation and train
         self.transform = get_transforms(train, image_size)
 
         df = pd.read_csv(csv_path)
@@ -80,6 +82,12 @@ class StraightenDataset(Dataset):
             image = image.transpose(Image.FLIP_LEFT_RIGHT)
             angle = -angle
 
+        if self.train and self.use_synthetic_rotation:
+            extra_deg = np.random.uniform(-30, 30)
+            image = image.rotate(-extra_deg, expand=False, fillcolor=(128, 128, 128))
+            angle = angle + extra_deg
+            angle = ((angle + 180) % 360) - 180  # keep in [-180, 180]
+
         image = self.transform(image)
 
         # Convert angle to (sin, cos) for circular regression
@@ -92,7 +100,7 @@ class StraightenDataset(Dataset):
 class InferenceDataset(Dataset):
     """Minimal dataset for inference — no labels, no augmentation."""
 
-    def __init__(self, image_paths: list[Path], image_size: int = 224) -> None:
+    def __init__(self, image_paths: list[Path], image_size: int = 480) -> None:
         self.image_paths = image_paths
         self.transform = get_transforms(train=False, image_size=image_size)
 
