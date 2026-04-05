@@ -179,9 +179,9 @@ def main() -> None:
     val_ds.dataset.train = False
 
     train_loader = DataLoader(train_ds, batch_size=args.batch_size,
-                              shuffle=True, num_workers=4, pin_memory=device.type == "cuda")
+                              shuffle=True, num_workers=16, pin_memory=device.type == "cuda")
     val_loader   = DataLoader(val_ds,   batch_size=args.batch_size,
-                              shuffle=False, num_workers=4, pin_memory=device.type == "cuda")
+                              shuffle=False, num_workers=16, pin_memory=device.type == "cuda")
 
     print(f"Train: {len(train_ds)} | Val: {len(val_ds)}")
 
