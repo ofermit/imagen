@@ -64,13 +64,13 @@ def train_epoch(
 ) -> float:
     model.train()
     total_loss = 0.0
-    for images, targets in loader:
-        images, targets = images.to(device), targets.to(device)
+    for images, aspects, targets in loader:
+        images, aspects, targets = images.to(device), aspects.to(device), targets.to(device)
         optimizer.zero_grad()
         
         if scaler is not None:
             with torch.amp.autocast('cuda'):
-                preds = model(images)
+                preds = model(images, aspects)
                 loss = circular_mse_loss(preds, targets)
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
@@ -78,7 +78,7 @@ def train_epoch(
             scaler.step(optimizer)
             scaler.update()
         else:
-            preds = model(images)
+            preds = model(images, aspects)
             loss = circular_mse_loss(preds, targets)
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -96,9 +96,9 @@ def val_epoch(
 ) -> float:
     model.eval()
     all_pred, all_true = [], []
-    for images, targets in loader:
-        images, targets = images.to(device), targets.to(device)
-        preds = model(images)
+    for images, aspects, targets in loader:
+        images, aspects, targets = images.to(device), aspects.to(device), targets.to(device)
+        preds = model(images, aspects)
         pred_deg = sincos_to_deg(preds)
         true_deg = sincos_to_deg(targets)
         all_pred.append(pred_deg)

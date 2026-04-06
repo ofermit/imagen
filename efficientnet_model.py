@@ -29,15 +29,16 @@ class EfficientNetModel(nn.Module):
 
         self.head = nn.Sequential(
             nn.Dropout(dropout),
-            nn.Linear(in_features, 256),
+            nn.Linear(in_features + 1, 256),
             nn.ReLU(inplace=True),
             nn.Dropout(dropout * 0.5),
             nn.Linear(256, 2),   # outputs: (sin θ, cos θ)
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, aspect: torch.Tensor) -> torch.Tensor:
         features = self.backbone(x)   # (B, 1280)
-        return self.head(features)    # (B, 2)
+        combined = torch.cat([features, aspect], dim=1)
+        return self.head(combined)    # (B, 2)
 
     def freeze_backbone(self) -> None:
         """Phase 1: freeze backbone, train head only."""

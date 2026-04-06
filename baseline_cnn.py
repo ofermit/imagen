@@ -48,22 +48,25 @@ class BaselineCNN(nn.Module):
 
         self.head = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(512, 128),
+            nn.Linear(512 + 1, 128),
             nn.ReLU(inplace=True),
             nn.Dropout(0.3),
             nn.Linear(128, 2),   # outputs: (sin θ, cos θ)
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, aspect: torch.Tensor) -> torch.Tensor:
         x = self.features(x)
         x = self.pool(x)
-        return self.head(x)
+        x = x.view(x.size(0), -1)
+        combined = torch.cat([x, aspect], dim=1)
+        return self.head(combined)
 
 
 if __name__ == "__main__":
     model = BaselineCNN()
     dummy = torch.randn(4, 3, 480, 480)
-    out = model(dummy)
+    aspects = torch.zeros(4, 1)
+    out = model(dummy, aspects)
     print(f"Output shape: {out.shape}")   # (4, 2)
     total = sum(p.numel() for p in model.parameters())
     print(f"Parameters: {total:,}")

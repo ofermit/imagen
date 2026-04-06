@@ -13,6 +13,20 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
+from torchvision.transforms import functional as TF
+
+
+def pad_to_square(img: Image.Image, fill: int = 128) -> Image.Image:
+    """Pad the shorter side with gray so the image becomes square."""
+    w, h = img.size
+    if w == h:
+        return img
+    size = max(w, h)
+    pad_left   = (size - w) // 2
+    pad_top    = (size - h) // 2
+    pad_right  = size - w - pad_left
+    pad_bottom = size - h - pad_top
+    return TF.pad(img, [pad_left, pad_top, pad_right, pad_bottom], fill=fill)
 
 
 def get_transforms(train: bool, image_size: int = 224) -> transforms.Compose:
@@ -23,6 +37,7 @@ def get_transforms(train: bool, image_size: int = 224) -> transforms.Compose:
     """
     if train:
         return transforms.Compose([
+            transforms.Lambda(pad_to_square),
             transforms.Resize((image_size, image_size)),
             transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.2, hue=0.05),
             transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 1.0)),
@@ -32,6 +47,7 @@ def get_transforms(train: bool, image_size: int = 224) -> transforms.Compose:
         ])
     else:
         return transforms.Compose([
+            transforms.Lambda(pad_to_square),
             transforms.Resize((image_size, image_size)),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406],
@@ -79,15 +95,22 @@ class StraightenDataset(Dataset):
             iterator = self.image_names
 
         images = []
+        aspects = []
         for name in iterator:
             img_path = self.images_dir / name
             img = Image.open(img_path).convert("RGB")
+            w, h = img.size
+            aspect = float(w) / float(h)
+            aspects.append([np.log(aspect)])
+
+            img = pad_to_square(img)
             img = img.resize((image_size, image_size), Image.Resampling.BILINEAR) if hasattr(Image, "Resampling") else img.resize((image_size, image_size), Image.BILINEAR)
             # Store as uint8 to save memory (3.1 GB vs 12.4 GB)
             tensor = torch.from_numpy(np.array(img)).permute(2, 0, 1).to(device=self.device, dtype=torch.uint8)
             images.append(tensor)
 
         self.images = torch.stack(images)
+        self.aspects = torch.tensor(aspects, dtype=torch.float32, device=self.device)
         self.angles = torch.tensor(self.angles_list, dtype=torch.float32, device=self.device)
 
         from torchvision.transforms import v2
@@ -99,10 +122,11 @@ class StraightenDataset(Dataset):
     def __len__(self) -> int:
         return len(self.image_names)
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # Convert uint8 -> float32 and scale to [0, 1]
         image = self.images[idx].float() / 255.0
         angle = self.angles[idx].item()
+        aspect_feat = self.aspects[idx]
 
         from torchvision.transforms import functional as F
 
@@ -127,7 +151,7 @@ class StraightenDataset(Dataset):
         rad = np.deg2rad(angle)
         target = torch.tensor([np.sin(rad), np.cos(rad)], dtype=torch.float32, device=self.device)
 
-        return image, target
+        return image, aspect_feat, target
 
 
 class InferenceDataset(Dataset):
@@ -140,6 +164,8 @@ class InferenceDataset(Dataset):
     def __len__(self) -> int:
         return len(self.image_paths)
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, str]:
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, str]:
         img = Image.open(self.image_paths[idx]).convert("RGB")
-        return self.transform(img), self.image_paths[idx].name
+        w, h = img.size
+        aspect_feat = torch.tensor([np.log(float(w) / float(h))], dtype=torch.float32)
+        return self.transform(img), aspect_feat, self.image_paths[idx].name
