@@ -8,6 +8,23 @@ from PIL import Image
 from torchvision import transforms
 
 
+def circular_mae_loss(pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    """MAE in degrees space — handles 0°/360° wrap-around correctly.
+    
+    Args:
+        pred: (B, 2) tensor of predicted (sin θ, cos θ).
+        target: (B, 2) tensor of ground-truth (sin θ, cos θ).
+
+    Returns:
+        Scalar loss in degrees.
+    """
+    pred_deg = sincos_to_deg(pred)
+    target_deg = sincos_to_deg(target)
+    diff = torch.abs(pred_deg - target_deg) % 360.0
+    diff = torch.min(diff, 360.0 - diff)
+    return diff.mean()
+
+
 def circular_mse_loss(pred: torch.Tensor, target_deg: torch.Tensor) -> torch.Tensor:
     """MSE in (sin, cos) space — handles 0°/360° wrap-around correctly.
 

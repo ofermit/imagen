@@ -27,7 +27,7 @@ from torch.utils.data import DataLoader, random_split
 from dataset import StraightenDataset
 from baseline_cnn import BaselineCNN
 from efficientnet_model import EfficientNetModel
-from circular import circular_mae, circular_mse_loss, sincos_to_deg
+from circular import circular_mae, circular_mse_loss, circular_mae_loss, sincos_to_deg
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -71,7 +71,7 @@ def train_epoch(
         if scaler is not None:
             with torch.amp.autocast('cuda'):
                 preds = model(images, aspects)
-                loss = circular_mse_loss(preds, targets)
+                loss = circular_mae_loss(preds, targets)
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
             nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -79,7 +79,7 @@ def train_epoch(
             scaler.update()
         else:
             preds = model(images, aspects)
-            loss = circular_mse_loss(preds, targets)
+            loss = circular_mae_loss(preds, targets)
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
@@ -105,10 +105,23 @@ def val_epoch(
         all_true.append(true_deg)
     pred_cat = torch.cat(all_pred)
     true_cat = torch.cat(all_true)
-    # In val_epoch, also compute what "always predict 0" would score
-    zero_mae = circular_mae(torch.zeros_like(pred_cat), true_cat)
-    print(f"  Zero-prediction MAE: {zero_mae:.3f}°")
-    return circular_mae(pred_cat, true_cat).item()
+    
+    overall_mae = circular_mae(pred_cat, true_cat).item()
+    zero_mae = circular_mae(torch.zeros_like(pred_cat), true_cat).item()
+
+    # Evaluate on "hard" images (true rotation > 1.0 degree)
+    mask_hard = torch.abs(true_cat) > 1.0
+    if mask_hard.any():
+        pred_hard = pred_cat[mask_hard]
+        true_hard = true_cat[mask_hard]
+        hard_mae = circular_mae(pred_hard, true_hard).item()
+        zero_hard_mae = circular_mae(torch.zeros_like(pred_hard), true_hard).item()
+        print(f"  [All  ] Model MAE: {overall_mae:.3f}° | Zero-guess MAE: {zero_mae:.3f}°")
+        print(f"  [>1.0°] Model MAE: {hard_mae:.3f}° | Zero-guess MAE: {zero_hard_mae:.3f}°  ({mask_hard.sum().item()} images)")
+    else:
+        print(f"  [All  ] Model MAE: {overall_mae:.3f}° | Zero-guess MAE: {zero_mae:.3f}°")
+
+    return overall_mae
 
 
 # ── Training phases ───────────────────────────────────────────────────────────

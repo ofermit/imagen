@@ -83,6 +83,11 @@ class StraightenDataset(Dataset):
         self.device = device if device is not None else torch.device("cpu")
 
         df = pd.read_csv(csv_path)
+        
+        # Filter out images with absolute rotation < 0.5
+        mask = df.iloc[:, 1].astype(float).abs() >= 0.5
+        df = df[mask]
+        
         self.image_names = df.iloc[:, 0].tolist()
         self.angles_list = df.iloc[:, 1].astype(float).tolist()
 
@@ -136,7 +141,7 @@ class StraightenDataset(Dataset):
             angle = -angle
 
         if self.train and self.use_synthetic_rotation:
-            extra_deg = torch.empty(1).uniform_(-30, 30).item()
+            extra_deg = torch.empty(1).uniform_(-3.0, 3.0).item()
             image = F.rotate(image, -extra_deg, fill=[0.5, 0.5, 0.5])
             angle = angle + extra_deg
             angle = ((angle + 180) % 360) - 180  # keep in [-180, 180]
