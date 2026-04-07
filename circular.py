@@ -71,7 +71,7 @@ _TO_TENSOR = transforms.ToTensor()
 
 from dataset import pad_to_square
 
-def _pil_to_tensor(img: Image.Image, size: int = 224) -> torch.Tensor:
+def _pil_to_tensor(img: Image.Image, size: int = 480) -> torch.Tensor:
     img = pad_to_square(img)
     img = img.resize((size, size), Image.Resampling.BILINEAR if hasattr(Image, "Resampling") else Image.BILINEAR)
     return _NORMALIZE(_TO_TENSOR(img))

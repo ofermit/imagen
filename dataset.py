@@ -29,7 +29,7 @@ def pad_to_square(img: Image.Image, fill: int = 128) -> Image.Image:
     return TF.pad(img, [pad_left, pad_top, pad_right, pad_bottom], fill=fill)
 
 
-def get_transforms(train: bool, image_size: int = 224) -> transforms.Compose:
+def get_transforms(train: bool, image_size: int = 480) -> transforms.Compose:
     """Return augmentation pipeline.
 
     NOTE: No random rotation — it would corrupt the angle labels.
