@@ -60,7 +60,7 @@ class BaselineCNN(nn.Module):
 
         self.head = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(512 + 1, 256),
+            nn.Linear(512, 256),
             nn.ReLU(inplace=True),
             nn.Dropout(0.4),
             nn.Linear(256, 2),   # outputs: (sin θ, cos θ)
@@ -72,23 +72,19 @@ class BaselineCNN(nn.Module):
             BasicBlock(out_channels, out_channels, 1)
         )
 
-    def forward(self, x: torch.Tensor, aspect: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.prep(x)
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
         x = self.pool(x)
-        x = x.view(x.size(0), -1)
-        combined = torch.cat([x, aspect], dim=1)
-        return self.head(combined)
-
+        return self.head(x)
 
 if __name__ == "__main__":
     model = BaselineCNN()
     dummy = torch.randn(4, 3, 480, 480)
-    aspects = torch.zeros(4, 1)
-    out = model(dummy, aspects)
+    out = model(dummy)
     print(f"Output shape: {out.shape}")   # (4, 2)
     total = sum(p.numel() for p in model.parameters())
     print(f"Parameters: {total:,}")

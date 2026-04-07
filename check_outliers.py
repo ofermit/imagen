@@ -47,9 +47,9 @@ def analyze_outliers():
     results = []
     
     with torch.no_grad():
-        for batch_idx, (images, aspects, targets) in enumerate(val_loader):
-            images, aspects, targets = images.to(device), aspects.to(device), targets.to(device)
-            preds = model(images, aspects)
+        for batch_idx, (images, targets) in enumerate(val_loader):
+            images, targets = images.to(device), targets.to(device)
+            preds = model(images)
             
             pred_deg = sincos_to_deg(preds)
             true_deg = sincos_to_deg(targets)

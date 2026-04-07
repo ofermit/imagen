@@ -30,10 +30,6 @@ class PretrainDataset(Dataset):
         item = self.dataset[idx]
         img = item['image'].convert('RGB')
         
-        # Original aspect
-        w, h = img.size
-        aspect_feat = torch.tensor([np.log(float(w) / float(h))], dtype=torch.float32)
-
         # Pad and resize
         img = pad_to_square(img)
         img = img.resize((self.image_size, self.image_size), Image.Resampling.BILINEAR if hasattr(Image, "Resampling") else Image.BILINEAR)
@@ -56,7 +52,7 @@ class PretrainDataset(Dataset):
         rad = np.deg2rad(angle)
         target = torch.tensor([np.sin(rad), np.cos(rad)], dtype=torch.float32)
 
-        return image, aspect_feat, target
+        return image, target
 
 def pretrain():
     device = get_device()
@@ -81,20 +77,20 @@ def pretrain():
     scaler = torch.amp.GradScaler('cuda') if device.type == 'cuda' else None
     
     best_mae = math.inf
-    epochs = 50
+    epochs = 10
     
     Path("checkpoints").mkdir(exist_ok=True)
     
     for epoch in range(1, epochs + 1):
         model.train()
         total_loss = 0.0
-        for i, (images, aspects, targets) in enumerate(train_loader):
-            images, aspects, targets = images.to(device), aspects.to(device), targets.to(device)
+        for i, (images, targets) in enumerate(train_loader):
+            images, targets = images.to(device), targets.to(device)
             optimizer.zero_grad()
             
             if scaler is not None:
                 with torch.amp.autocast('cuda'):
-                    preds = model(images, aspects)
+                    preds = model(images)
                     loss = circular_mae_loss(preds, targets)
                 scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
@@ -102,7 +98,7 @@ def pretrain():
                 scaler.step(optimizer)
                 scaler.update()
             else:
-                preds = model(images, aspects)
+                preds = model(images)
                 loss = circular_mae_loss(preds, targets)
                 loss.backward()
                 nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -118,9 +114,9 @@ def pretrain():
         model.eval()
         all_pred, all_true = [], []
         with torch.no_grad():
-            for images, aspects, targets in val_loader:
-                images, aspects, targets = images.to(device), aspects.to(device), targets.to(device)
-                preds = model(images, aspects)
+            for images, targets in val_loader:
+                images, targets = images.to(device), targets.to(device)
+                preds = model(images)
                 all_pred.append(sincos_to_deg(preds))
                 all_true.append(sincos_to_deg(targets))
                 
@@ -138,6 +134,10 @@ def pretrain():
                 "val_mae": val_mae,
             }, "checkpoints/efficientnet_pretrained.pth")
             print("  Saved best pretrain checkpoint.")
+
+if __name__ == "__main__":
+    pretrain()
+    print("  Saved best pretrain checkpoint.")
 
 if __name__ == "__main__":
     pretrain()

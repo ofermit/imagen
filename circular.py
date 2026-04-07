@@ -91,17 +91,14 @@ def predict_with_tta(
     model.eval()
     img = Image.open(image_path).convert("RGB")
 
-    w, h = img.size
-    aspect = torch.tensor([[np.log(float(w) / float(h))]], dtype=torch.float32, device=device)
-
     # Original
     t_orig = _pil_to_tensor(img, image_size).unsqueeze(0).to(device)
-    pred_orig = model(t_orig, aspect)[0].cpu()   # (2,)
+    pred_orig = model(t_orig)[0].cpu()   # (2,)
 
     # Horizontal flip — sin negates, cos stays
     img_flip = img.transpose(Image.FLIP_LEFT_RIGHT)
     t_flip = _pil_to_tensor(img_flip, image_size).unsqueeze(0).to(device)
-    pred_flip = model(t_flip, aspect)[0].cpu()
+    pred_flip = model(t_flip)[0].cpu()
     pred_flip[0] = -pred_flip[0]         # undo the sign flip
 
     avg = (pred_orig + pred_flip) / 2.0

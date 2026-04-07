@@ -127,11 +127,10 @@ class StraightenDataset(Dataset):
     def __len__(self) -> int:
         return len(self.image_names)
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         # Convert uint8 -> float32 and scale to [0, 1]
         image = self.images[idx].float() / 255.0
         angle = self.angles[idx].item()
-        aspect_feat = self.aspects[idx]
 
         from torchvision.transforms import functional as F
 
@@ -141,7 +140,7 @@ class StraightenDataset(Dataset):
             angle = -angle
 
         if self.train and self.use_synthetic_rotation:
-            extra_deg = torch.empty(1).uniform_(-3.0, 3.0).item()
+            extra_deg = torch.empty(1).uniform_(-8.0, 8.0).item()
             image = F.rotate(image, -extra_deg, fill=[0.5, 0.5, 0.5])
             angle = angle + extra_deg
             angle = ((angle + 180) % 360) - 180  # keep in [-180, 180]
@@ -156,7 +155,7 @@ class StraightenDataset(Dataset):
         rad = np.deg2rad(angle)
         target = torch.tensor([np.sin(rad), np.cos(rad)], dtype=torch.float32, device=self.device)
 
-        return image, aspect_feat, target
+        return image, target
 
 
 class InferenceDataset(Dataset):
@@ -169,8 +168,6 @@ class InferenceDataset(Dataset):
     def __len__(self) -> int:
         return len(self.image_paths)
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, str]:
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, str]:
         img = Image.open(self.image_paths[idx]).convert("RGB")
-        w, h = img.size
-        aspect_feat = torch.tensor([np.log(float(w) / float(h))], dtype=torch.float32)
-        return self.transform(img), aspect_feat, self.image_paths[idx].name
+        return self.transform(img), self.image_paths[idx].name
